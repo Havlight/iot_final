@@ -27,9 +27,8 @@ class BotState:
         if state_name not in self.flags:
             print("illegal state name")
             return
-        for key in self.flags.keys():
-            if key != state_name:
-                self.flags[key] = False
+        for key in self.flags:
+            self.flags[key] = False
         self.flags[state_name] = True
         self.lock.release()
 
