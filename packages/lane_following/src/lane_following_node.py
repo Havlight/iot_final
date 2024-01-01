@@ -9,16 +9,23 @@ from turbojpeg import TurboJPEG
 import cv2
 import numpy as np
 from duckietown_msgs.msg import WheelsCmdStamped, Twist2DStamped
+from sensor_msgs.msg import Range
 import os
 import threading
 import math
 import deadreckoning
 import state_machine
+import torch
+from ultralytics import YOLO
+from rospkg import RosPack
 
 HOST_NAME = os.environ["VEHICLE_NAME"]
 ROAD_MASK = [(20, 60, 0), (50, 255, 255)]
 DEBUG = False
 ENGLISH = False
+
+torch.backends.cudnn.enabled = False
+torch.cuda.is_available = lambda: False
 
 
 class LaneFollowNode(DTROS):
@@ -29,6 +36,11 @@ class LaneFollowNode(DTROS):
         self.veh = HOST_NAME
         self.jpeg = TurboJPEG()
         self.loginfo("Initialized")
+
+        # load model
+        self.ros_pack = RosPack()
+        self.model = YOLO(self.ros_pack.get_path("lane_following") + "/data/best.pt")
+        self.model.to('cpu')
 
         # PID Variables
         self.proportional = None
@@ -45,21 +57,20 @@ class LaneFollowNode(DTROS):
         self.last_error = 0
         self.last_time = rospy.get_time()
 
-        self.timer = 0
-
         # handling stopping at stopline
-        self.stop_timer_reset = 0  # 0 is can stop any time, non-zero means wait a period of time and then we look for stop lines
+        self.stop_cnt = 3
         self.lock = threading.Lock()  # used to coordinate the subscriber thread and the main thread
         self.controller = deadreckoning.DeadReckoning()  # will handle wheel commands during turning
 
         # Publishers & Subscribers
-        self.bot_state = state_machine.BotState(
-            1)  # pass in 1 as placeholder; in the end self.bot_state is not used in part 3
+        self.bot_state = state_machine.BotState()  # pass in 1 as placeholder; in the end self.bot_state is not used in part 3
 
         if DEBUG:
             self.pub = rospy.Publisher("/{self.veh}/output/image/mask/compressed",
                                        CompressedImage,
                                        queue_size=1)
+        self.sub_iof = rospy.Subscriber(f"/{self.veh}/front_center_tof_driver_node/range", Range, self.cb_iof,
+                                        queue_size=1)
 
         self.sub = rospy.Subscriber(f"/{self.veh}/camera_node/image/compressed", CompressedImage,
                                     self.callback, queue_size=1, buff_size="20MB")
@@ -68,18 +79,38 @@ class LaneFollowNode(DTROS):
                                        Twist2DStamped,
                                        queue_size=1)
 
-    def callback(self, msg):
-        # update stop timer/timer reset and skip the callback if the vehicle is stopped
-        # self.lock.acquire()
+    def cb_iof(self, msg):
+        # print(msg.min_range, msg.max_range, msg.range)
+        if msg.range <= 0.15:
+            self.stop_cnt -= 1
+        else:
+            self.stop_cnt = 3
 
-        # self.lock.release()
+        if self.stop_cnt <= 0:
+            self.stop_cnt = 3
+            self.bot_state.update_state("obstacle")
+
+    def callback(self, msg):
+
+        img = self.jpeg.decode(msg.data)
+
+        if self.bot_state.gey_obstacle_flag():
+            self.controller.reset_position()
+            self.controller.stop(50)
+            results = self.model.predict(img, show=False, device="cpu", conf=0.5)
+            if len(results[0].boxes) == 0:
+                print("no object")
+                self.bot_state.update_state("lane_follow")
+                return
+            for boxes in results[0].boxes:
+                print("class:", boxes.cls)
+                print("conf:", boxes.conf)
+                print("xyxy", boxes.xyxy)
+            self.controller.stop(25)
 
         if not self.bot_state.get_lane_following_flag():
             self.proportional = None
             return
-
-        img = self.jpeg.decode(msg.data)
-        flags = self.bot_state.get_flags()
 
         crop = img[300:-1, :, :]
         crop_width = crop.shape[1]
@@ -105,9 +136,9 @@ class LaneFollowNode(DTROS):
                 cx = int(M['m10'] / M['m00']) + 25
                 cy = int(M['m01'] / M['m00'])
                 threshold = 200
-                
+
                 self.proportional = min(threshold, max(-threshold, cx - int(crop_width / 2) + self.offset))
-                
+
                 if DEBUG:
                     cv2.drawContours(crop, contours, max_idx, (0, 255, 0), 3)
                     cv2.circle(crop, (cx, cy), 7, (0, 0, 255), -1)
@@ -121,11 +152,6 @@ class LaneFollowNode(DTROS):
             self.pub.publish(rect_img_msg)
 
     def drive(self):
-        if self.timer > 0:
-            self.offset = -220
-            self.timer -= 1
-        if self.timer <= 0:
-            self.offset = 220
         if self.proportional is None:
             self.twist.omega = 0
         else:
@@ -144,7 +170,8 @@ class LaneFollowNode(DTROS):
             if DEBUG:
                 self.loginfo(self.proportional, P, D, self.twist.omega, self.twist.v)
 
-        self.vel_pub.publish(self.twist)
+        if self.bot_state.get_lane_following_flag():
+            self.vel_pub.publish(self.twist)
 
     def hook(self):
         print("SHUTTING DOWN")
@@ -164,4 +191,3 @@ if __name__ == "__main__":
     while not rospy.is_shutdown():
         node.drive()
         rate.sleep()
-
