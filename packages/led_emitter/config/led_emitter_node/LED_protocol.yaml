@@ -19,29 +19,41 @@ LED_protocol:
     f5: &f5 10.6
 
   signals:
+    PURPLE:
+      color_mask: []
+      color_list: "purple"
+      frequency_mask: []
+      frequency: 0
+
+    CYAN:
+      color_mask: [ ]
+      color_list: "cyan"
+      frequency_mask: []
+      frequency: 0
+
     CAR_SIGNAL_PRIORITY:
       color_mask: []
       color_list: ["purple","red","purple","red","purple"]
-      frequency_mask: [1,0,1,0,1]
-      frequency: *f3
+      frequency_mask: []
+      frequency: 0
 
     CAR_SIGNAL_SACRIFICE_FOR_PRIORITY:
       color_mask: []
       color_list: ["white","red","white","red","white"]
-      frequency_mask: [1,0,1,0,1]
-      frequency: *f1
+      frequency_mask: []
+      frequency: 0
 
     CAR_SIGNAL_A:
       color_mask: []
       color_list: ["white","red","white","red","white"]
-      frequency_mask: [1,0,1,0,1]
-      frequency: *f2
+      frequency_mask: []
+      frequency: 0
 
     CAR_SIGNAL_GREEN:
       color_mask: []
       color_list: "green"
-      frequency_mask: [1,1,1,1,1]
-      frequency: *f3
+      frequency_mask: []
+      frequency: 0
 
     CAR_DRIVING:
       color_mask: []
@@ -85,29 +97,23 @@ LED_protocol:
       frequency_mask: []
       frequency:  0
 
-    light_off:
+    OBSTACLE_ALERT:
       color_mask: []
-      color_list: "switchedoff"
+      color_list: ["red","yellow","white","yellow","white"]
       frequency_mask: []
       frequency:  0
 
-    OBSTACLE_ALERT:
-      color_mask: []
-      color_list: ["white","yellow","white","yellow","white"]
-      frequency_mask: [0,1,0,1,0]
-      frequency:  *f1
-
     OBSTACLE_STOPPED:
       color_mask: []
-      color_list: ["white","red","white","red","white"]
-      frequency_mask: [0,1,0,1,0]
-      frequency:  *f2
+      color_list: ["yellow","red","yellow","red","white"]
+      frequency_mask: []
+      frequency:  0
 
     POPO:
       color_mask: []
       color_list: ["blue","red","switchedoff","blue","red"]
-      frequency_mask: [1,1,0,1,1]
-      frequency: *f2
+      frequency_mask: []
+      frequency: 0
 
 LED_scale: 0.8
 channel_order:

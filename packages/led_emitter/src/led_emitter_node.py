@@ -121,7 +121,7 @@ class LEDEmitterNode(DTROS):
         self.changePattern(self.current_pattern_name)
 
         # Initialize the timer
-        self.frequency = 1.0 / self._LED_protocol["signals"]["CAR_SIGNAL_A"]["frequency"]
+        self.frequency = 1.0 / 4
         self.is_on = False
         self.cycle_timer = rospy.Timer(rospy.Duration.from_sec(self.frequency / 2.0), self._cycle_timer)
 

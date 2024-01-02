@@ -70,9 +70,9 @@ class LaneFollowNode(DTROS):
         self.bot_state = state_machine.BotState()  # pass in 1 as placeholder; in the end self.bot_state is not used in part 3
         self.class_dict = {0: "Hsiao", 1: "Roast duck", 2: "arduino", 3: "balltank", 4: "base", 5: "duck", 6: "tank",
                            7: "terrorist"}
-        self.led_map = {0: "RED", 1: "GREEN", 2: "BLUE", 3: "YELLOW", 4: "POPO", 5: "OBSTACLE_STOPPED",
-                        6: "OBSTACLE_ALERT",
-                        7: "CAR_SIGNAL_A"}
+        self.led_map = {0: "RED", 1: "GREEN", 2: "BLUE", 3: "YELLOW", 4: "POPO", 5: "CYAN",
+                        6: "WHITE",
+                        7: "PURPLE"}
         if DEBUG:
             self.pub = rospy.Publisher("f/{self.veh}/output/image/mask/compressed",
                                        CompressedImage,
@@ -94,7 +94,7 @@ class LaneFollowNode(DTROS):
         if self.bot_state.gey_obstacle_flag():
             return
 
-        if msg.range <= 0.2:
+        if msg.range <= 0.25:
             self.stop_cnt -= 1
         else:
             self.stop_cnt = 6
@@ -110,19 +110,24 @@ class LaneFollowNode(DTROS):
             id = tensor.tolist()[0]
         else:
             id = tensor
+
         if id == self.last_id:
             return
         else:
             self.last_id = id
 
         if 0 <= id <= 7:
+            print("change led to " + self.led_map[id])
+            print("find:" + self.class_dict[id])
             self.pub_led.publish(self.led_map[id])
         else:
-            self.pub_led.publish("CAR_SIGNAL_GREEN")
+            print("change led to OBSTACLE_STOPPED")
+            self.pub_led.publish("OBSTACLE_STOPPED")
 
     def callback(self, msg):
 
         img = self.jpeg.decode(msg.data)  # 480 680 3
+        # yolo_crop = img[0:360, 170:510, :]
 
         if self.bot_state.gey_obstacle_flag():
             self.controller.reset_position()
@@ -131,28 +136,25 @@ class LaneFollowNode(DTROS):
             if self.yolo_cnt >= 1:
                 return
             self.yolo_cnt = 12
-            results = self.model.predict(img, show=False, device="cpu", conf=0.6)
+
+            self.controller.driveForTime(-0.9 * self.speed, -0.9 * self.speed, 20)
+            self.controller.stop(10)
+
+            results = self.model.predict(img, show=False, device="cpu", conf=0.5)
             if len(results[0].boxes) == 0:
+                self.set_LED(-1)
                 print("no object detected")
             for boxes in results[0].boxes:
-                print("class:", boxes.cls, type(boxes.cls))
                 print("conf:", boxes.conf)
                 self.set_LED(boxes.cls)
-
-            self.controller.driveForTime(-0.9 * self.speed, -0.9 * self.speed, 25)
-            # self.controller.stop(20)
-            self.controller.driveForTime(0.05 * self.speed, 0.9 * self.speed, 42)
-            # self.controller.stop(20)
-            self.controller.driveForTime(0.5 * self.speed, 0.5 * self.speed, 16)
-            # self.controller.stop(20)
-            self.controller.driveForTime(0.8 * self.speed, 0.1 * self.speed, 20)
-            # self.controller.stop(20)
+                break
+            self.controller.driveForTime(0.04 * self.speed, 0.9 * self.speed, 40)
+            self.controller.driveForTime(0.5 * self.speed, 0.5 * self.speed, 10)
+            self.controller.driveForTime(0.8 * self.speed, 0.1 * self.speed, 25)
             self.controller.driveForTime(0.6 * self.speed, 0.6 * self.speed, 35)
-            # self.controller.stop(20)
             self.controller.driveForTime(0.9 * self.speed, 0.1 * self.speed, 20)
-            # self.controller.stop(20)
             self.controller.driveForTime(0.3 * self.speed, 0.3 * self.speed, 20)
-            # self.controller.stop(20)
+            self.controller.stop(5)
 
             self.bot_state.update_state("lane_follow")
 
