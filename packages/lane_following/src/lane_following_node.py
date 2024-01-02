@@ -62,6 +62,7 @@ class LaneFollowNode(DTROS):
         # handling stopping at stopline
         self.stop_cnt = 6
         self.yolo_cnt = 0
+        self.last_id = -1
         self.lock = threading.Lock()  # used to coordinate the subscriber thread and the main thread
         self.controller = deadreckoning.DeadReckoning()  # will handle wheel commands during turning
 
@@ -69,16 +70,14 @@ class LaneFollowNode(DTROS):
         self.bot_state = state_machine.BotState()  # pass in 1 as placeholder; in the end self.bot_state is not used in part 3
         self.class_dict = {0: "Hsiao", 1: "Roast duck", 2: "arduino", 3: "balltank", 4: "base", 5: "duck", 6: "tank",
                            7: "terrorist"}
+        self.led_map = {0: "RED", 1: "GREEN", 2: "BLUE", 3: "YELLOW", 4: "POPO", 5: "OBSTACLE_STOPPED",
+                        6: "OBSTACLE_ALERT",
+                        7: "CAR_SIGNAL_A"}
         if DEBUG:
             self.pub = rospy.Publisher("f/{self.veh}/output/image/mask/compressed",
                                        CompressedImage,
                                        queue_size=1)
-
-        # self.led_srv = f"/{self.veh}/led_emitter_node/set_pattern"
-        # self.led_custom_srv = f"/{self.veh}/led_emitter_node/set_custom_pattern"
-        # rospy.wait_for_service(self.led_srv)
-        # rospy.wait_for_service(self.led_custom_srv)
-        # self.led_client = rospy.ServiceProxy(self.led_custom_srv, SetCustomLEDPattern)
+        self.pub_led = rospy.Publisher(f"/{self.veh}/led_emitter_node/change_led", String, queue_size=1)
 
         self.sub_iof = rospy.Subscriber(f"/{self.veh}/front_center_tof_driver_node/range", Range, self.cb_iof,
                                         queue_size=1)
@@ -103,8 +102,23 @@ class LaneFollowNode(DTROS):
         if self.stop_cnt <= 0:
             if self.bot_state.get_lane_following_flag():
                 self.bot_state.update_state("obstacle")
-                print("range:", msg.range)
+                # print("range:", msg.range)
             self.stop_cnt = 6
+
+    def set_LED(self, tensor):
+        if type(tensor) is not int:
+            id = tensor.tolist()[0]
+        else:
+            id = tensor
+        if id == self.last_id:
+            return
+        else:
+            self.last_id = id
+
+        if 0 <= id <= 7:
+            self.pub_led.publish(self.led_map[id])
+        else:
+            self.pub_led.publish("CAR_SIGNAL_GREEN")
 
     def callback(self, msg):
 
@@ -123,19 +137,21 @@ class LaneFollowNode(DTROS):
             for boxes in results[0].boxes:
                 print("class:", boxes.cls, type(boxes.cls))
                 print("conf:", boxes.conf)
-                print("xyxy", boxes.xyxy)
+                self.set_LED(boxes.cls)
 
             self.controller.driveForTime(-0.9 * self.speed, -0.9 * self.speed, 25)
-            self.controller.stop(20)
-            self.controller.driveForTime(0.06 * self.speed, 0.9 * self.speed, 40)
-            self.controller.stop(20)
+            # self.controller.stop(20)
+            self.controller.driveForTime(0.05 * self.speed, 0.9 * self.speed, 42)
+            # self.controller.stop(20)
+            self.controller.driveForTime(0.5 * self.speed, 0.5 * self.speed, 16)
+            # self.controller.stop(20)
+            self.controller.driveForTime(0.8 * self.speed, 0.1 * self.speed, 20)
+            # self.controller.stop(20)
             self.controller.driveForTime(0.6 * self.speed, 0.6 * self.speed, 35)
-            self.controller.stop(20)
+            # self.controller.stop(20)
             self.controller.driveForTime(0.9 * self.speed, 0.1 * self.speed, 20)
-            self.controller.stop(20)
+            # self.controller.stop(20)
             self.controller.driveForTime(0.3 * self.speed, 0.3 * self.speed, 20)
-            self.controller.stop(20)
-            # self.controller.driveForTime(0.67 * self.speed, 0.2 * self.speed, 40)
             # self.controller.stop(20)
 
             self.bot_state.update_state("lane_follow")
@@ -215,26 +231,6 @@ class LaneFollowNode(DTROS):
 
     def on_shutdown(self):
         self.hook()
-
-    # def set_LED(self, id):
-    #     if id == 0:
-    #         self.led_client("pattern: {color_list: ['red','red','white','white','white']}")
-    #     elif id == 1:
-    #         self.led_client("pattern: {color_list: ['yellow','yellow','white','white','white']}")
-    #     elif id == 2:
-    #         self.led_client("pattern: {color_list: ['green','green','white','white','white']}")
-    #     elif id == 3:
-    #         self.led_client("pattern: {color_list: ['blue','blue','white','white','white']}")
-    #     elif id == 4:
-    #         self.led_client("pattern: {color_list: ['yellow','yellow','white','white','white']}")
-    #     elif id == 5:
-    #         self.led_client("pattern: {color_list: ['pink','pink','white','white','white']}")
-    #     elif id == 6:
-    #         self.led_client("pattern: {color_list: ['blue','yellow','white','white','white']}")
-    #     elif id == 7:
-    #         self.led_client("pattern: {color_list: ['red','pink','white','white','white']}")
-    #     else:
-    #         self.led_client("pattern: {color_list: ['white','white','white','white','white']}")
 
 
 if __name__ == "__main__":
