@@ -50,7 +50,7 @@ class LaneFollowNode(DTROS):
             self.offset = -220
         else:
             self.offset = 220
-        self.velocity = 0.32
+        self.velocity = 0.34
         self.speed = .6
         self.twist = Twist2DStamped(v=self.velocity, omega=0)
 
@@ -125,14 +125,18 @@ class LaneFollowNode(DTROS):
                 print("conf:", boxes.conf)
                 print("xyxy", boxes.xyxy)
 
-            self.controller.driveForTime(-1.0 * self.speed, -1.0 * self.speed, 27)
+            self.controller.driveForTime(-0.9 * self.speed, -0.9 * self.speed, 25)
             self.controller.stop(20)
-            self.controller.driveForTime(0.04 * self.speed, 0.96 * self.speed, 24)
+            self.controller.driveForTime(0.06 * self.speed, 0.9 * self.speed, 40)
             self.controller.stop(20)
-            self.controller.driveForTime(1.0 * self.speed, 1.0 * self.speed, 37)
+            self.controller.driveForTime(0.6 * self.speed, 0.6 * self.speed, 35)
             self.controller.stop(20)
-            self.controller.driveForTime(0.67 * self.speed, 0.2 * self.speed, 18)
+            self.controller.driveForTime(0.9 * self.speed, 0.1 * self.speed, 20)
             self.controller.stop(20)
+            self.controller.driveForTime(0.3 * self.speed, 0.3 * self.speed, 20)
+            self.controller.stop(20)
+            # self.controller.driveForTime(0.67 * self.speed, 0.2 * self.speed, 40)
+            # self.controller.stop(20)
 
             self.bot_state.update_state("lane_follow")
 
