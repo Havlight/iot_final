@@ -62,7 +62,6 @@ class LaneFollowNode(DTROS):
         # handling stopping at stopline
         self.stop_cnt = 6
         self.yolo_cnt = 0
-        self.last_id = -1
         self.lock = threading.Lock()  # used to coordinate the subscriber thread and the main thread
         self.controller = deadreckoning.DeadReckoning()  # will handle wheel commands during turning
 
@@ -94,7 +93,7 @@ class LaneFollowNode(DTROS):
         if self.bot_state.gey_obstacle_flag():
             return
 
-        if msg.range <= 0.25:
+        if msg.range <= 0.17:
             self.stop_cnt -= 1
         else:
             self.stop_cnt = 6
@@ -105,24 +104,39 @@ class LaneFollowNode(DTROS):
                 # print("range:", msg.range)
             self.stop_cnt = 6
 
-    def set_LED(self, tensor):
-        if type(tensor) is not int:
-            id = tensor.tolist()[0]
-        else:
-            id = tensor
+    def set_LED(self, cid):
 
-        if id == self.last_id:
-            return
-        else:
-            self.last_id = id
-
-        if 0 <= id <= 7:
-            print("change led to " + self.led_map[id])
-            print("find:" + self.class_dict[id])
-            self.pub_led.publish(self.led_map[id])
+        if 0 <= cid <= 7:
+            print("change led to " + self.led_map[cid])
+            self.pub_led.publish(self.led_map[cid])
         else:
             print("change led to OBSTACLE_STOPPED")
             self.pub_led.publish("OBSTACLE_STOPPED")
+
+    def avoidance(self):
+        # self.controller.driveForTime(-1 * self.speed, 1 * self.speed, 23)
+        # self.controller.stop(10)
+        # self.controller.driveForTime(1 * self.speed, 1 * self.speed, 20)
+        # self.controller.stop(10)
+        # self.controller.driveForTime(1 * self.speed, -1 * self.speed, 20)
+        # self.controller.stop(10)
+        # self.controller.driveForTime(1 * self.speed, 1 * self.speed, 50)
+        # self.controller.stop(10)
+        # self.controller.driveForTime(1 * self.speed, -1 * self.speed, 20)
+        # self.controller.stop(10)
+        # self.controller.driveForTime(1 * self.speed, 1 * self.speed, 18)
+
+         self.controller.driveForTime(0.04 * self.speed, 0.9 * self.speed, 40)
+         self.controller.driveForTime(0.5 * self.speed, 0.5 * self.speed, 10)
+         self.controller.driveForTime(0.8 * self.speed, 0.1 * self.speed, 25)
+         self.controller.driveForTime(0.6 * self.speed, 0.6 * self.speed, 25)
+         self.controller.driveForTime(0.9 * self.speed, 0.1 * self.speed, 20)
+         self.controller.driveForTime(0.3 * self.speed, 0.3 * self.speed, 20)
+         self.controller.stop(5)
+
+    def forward(self):
+        self.controller.driveForTime(1 * self.speed, 1 * self.speed, 60)
+        self.controller.stop(10)
 
     def callback(self, msg):
 
@@ -132,31 +146,43 @@ class LaneFollowNode(DTROS):
         if self.bot_state.gey_obstacle_flag():
             self.controller.reset_position()
             self.controller.stop(5)
-            self.yolo_cnt -= 1
-            if self.yolo_cnt >= 1:
-                return
-            self.yolo_cnt = 12
 
-            self.controller.driveForTime(-0.9 * self.speed, -0.9 * self.speed, 20)
+            self.yolo_cnt -= 1
+            if self.yolo_cnt > 0:
+                return
+            self.yolo_cnt = 10
+
+            self.controller.driveForTime(-0.9 * self.speed, -0.9 * self.speed, 15)
             self.controller.stop(10)
 
             results = self.model.predict(img, show=False, device="cpu", conf=0.5)
+            
             if len(results[0].boxes) == 0:
                 self.set_LED(-1)
                 print("no object detected")
+                self.avoidance()
+                self.bot_state.update_state("lane_follow")
+                return
+            max_conf = -1
+            detected_cid = -1
             for boxes in results[0].boxes:
-                print("conf:", boxes.conf)
-                self.set_LED(boxes.cls)
-                break
-            self.controller.driveForTime(0.04 * self.speed, 0.9 * self.speed, 40)
-            self.controller.driveForTime(0.5 * self.speed, 0.5 * self.speed, 10)
-            self.controller.driveForTime(0.8 * self.speed, 0.1 * self.speed, 25)
-            self.controller.driveForTime(0.6 * self.speed, 0.6 * self.speed, 35)
-            self.controller.driveForTime(0.9 * self.speed, 0.1 * self.speed, 20)
-            self.controller.driveForTime(0.3 * self.speed, 0.3 * self.speed, 20)
-            self.controller.stop(5)
+                cid = boxes.cls.tolist()[0]
+                conf = boxes.conf.tolist()[0]
+
+                if conf > max_conf:
+                    max_conf = conf
+                    detected_cid = cid
+
+            print("max conf:", max_conf)
+            print("find:" + self.class_dict[detected_cid])
+            self.set_LED(detected_cid)
+            if detected_cid >= 4:
+                self.forward()
+            else:
+                self.avoidance()
 
             self.bot_state.update_state("lane_follow")
+            return
 
         if not self.bot_state.get_lane_following_flag():
             self.proportional = None
@@ -222,7 +248,6 @@ class LaneFollowNode(DTROS):
 
         if self.bot_state.get_lane_following_flag():
             self.vel_pub.publish(self.twist)
-
     def hook(self):
         print("SHUTTING DOWN")
         self.twist.v = 0
@@ -237,7 +262,7 @@ class LaneFollowNode(DTROS):
 
 if __name__ == "__main__":
     node = LaneFollowNode("lanefollow_node")
-    rate = rospy.Rate(14)  # 8hz
+    rate = rospy.Rate(8)  # 8hz
     while not rospy.is_shutdown():
         node.drive()
         rate.sleep()
