@@ -1,3 +1,5 @@
+
+
 # Template: template-ros
 
 This template provides a boilerplate repository
@@ -37,6 +39,8 @@ your new repository.
 
 The directory `/launchers` can contain as many launchers (launching scripts)
 as you want. A default launcher called `default.sh` must always be present.
+
+https://github.com/Havlight/iot_final/assets/54707605/50f6a71d-5b48-477b-88bd-ab4f93792820
 
 If you create an executable script (i.e., a file with a valid shebang statement)
 a launcher will be created for it. For example, the script file 
